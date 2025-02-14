@@ -1,0 +1,65 @@
+import sqlite3
+import os
+from database import Database
+
+# Path to log file
+log_path = os.path.join(os.path.dirname(__file__), 'data', 'log.txt')
+
+def log_operation(entry):
+    """Logs operations to log.txt"""
+    with open(log_path, 'a') as log_file:
+        log_file.write(entry + '\n')
+
+def remove_item():
+    db = Database()
+    
+    code = input("Enter item code: ").strip()
+    if not code:
+        print("Invalid code. Operation canceled.")
+        return
+    
+    existing_item = db.fetch_one("SELECT amount FROM inventory WHERE code = ?", (code,))
+    if not existing_item:
+        print("Item not found. Operation canceled.")
+        return
+    
+    try:
+        amount_to_remove = int(input("Enter amount to remove: ").strip())
+        if amount_to_remove <= 0 or amount_to_remove > existing_item[0]:
+            raise ValueError
+    except ValueError:
+        print("Invalid amount. Operation canceled.")
+        return
+    
+    transaction_type = input("Was the item BROKEN? [B] for Broken: ").strip().upper()
+    if transaction_type not in ['B']:
+#        print("Invalid input. Operation canceled.")
+#        return
+    
+    try:
+        sell_price = float(input("Enter price per unit: ").strip())
+        if sell_price < 0:
+            raise ValueError
+    except ValueError:
+        print("Invalid price. Operation canceled.")
+        return
+    
+    new_amount = existing_item[0] - amount_to_remove
+    if new_amount == 0:
+        db.execute_query("DELETE FROM inventory WHERE code = ?", (code,))
+    else:
+        db.execute_query("UPDATE inventory SET amount = ?, last_updated = CURRENT_TIMESTAMP WHERE code = ?", (new_amount, code))
+    
+#    transaction_label = "sold" if transaction_type == 'S' else "broken"
+    transaction_label = "broken" if transaction_type == 'B' else "sale"
+    log_operation(f"Removed: {amount_to_remove}x {code} ({transaction_label}) at ${sell_price}")
+    
+    db.execute_query("INSERT INTO transactions (code, amount, price, transaction_type) VALUES (?, ?, ?, ?)", 
+                     (code, amount_to_remove, sell_price, transaction_label))
+    
+    db.close()
+    print("Item removed successfully!")
+
+if __name__ == "__main__":
+    remove_item()
+
